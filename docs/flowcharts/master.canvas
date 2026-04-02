@@ -1,0 +1,294 @@
+{
+  "nodes": [
+    {
+      "id": "title",
+      "type": "text",
+      "x": 600,
+      "y": -120,
+      "width": 400,
+      "height": 80,
+      "text": "# CNN ImageNet Classifier 总流程图\nResNet-34 | 两个任务入口: 训练 / 评估"
+    },
+    {
+      "id": "config_yaml",
+      "type": "text",
+      "x": 560,
+      "y": 0,
+      "width": 480,
+      "height": 100,
+      "text": "### configs/default.yaml\n所有超参数的统一配置中心\ndata(root/batch_size/num_workers) | model(name/num_classes) | train(epochs/lr/warmup) | log_dir | checkpoint_dir"
+    },
+    {
+      "id": "train_entry",
+      "type": "text",
+      "x": 80,
+      "y": 160,
+      "width": 280,
+      "height": 80,
+      "text": "## 训练任务入口\npython train.py --config configs/default.yaml"
+    },
+    {
+      "id": "test_entry",
+      "type": "text",
+      "x": 1240,
+      "y": 160,
+      "width": 280,
+      "height": 80,
+      "text": "## 评估任务入口\npython test.py --config xxx.yaml --checkpoint xxx.pth --topk 1 5"
+    },
+    {
+      "id": "load_config_node",
+      "type": "text",
+      "x": 580,
+      "y": 160,
+      "width": 440,
+      "height": 80,
+      "text": "### data_processing.load_config(config_path)\n读取 YAML -> 返回 cfg 字典\ntrain.py 和 test.py 均调用此函数"
+    },
+    {
+      "id": "data_pipeline",
+      "type": "text",
+      "x": 440,
+      "y": 300,
+      "width": 720,
+      "height": 200,
+      "text": "### data_processing 数据管道\nbuild_train_transform(): RandomResizedCrop(224) + RandomHFlip + ColorJitter + ToTensor + Normalize\nbuild_val_transform(): Resize(256) + CenterCrop(224) + ToTensor + Normalize\nbuild_datasets(data_root): ImageFolder(train_dir) + ImageFolder(val_dir)\nbuild_dataloaders(cfg): DataLoader(pin_memory=True, num_workers, persistent_workers, prefetch_factor)\n返回: (train_loader, val_loader)"
+    },
+    {
+      "id": "model_build",
+      "type": "text",
+      "x": 560,
+      "y": 560,
+      "width": 480,
+      "height": 160,
+      "text": "### model.build_resnet34(num_classes)\n构建 ResNet-34 模型\nStem(7x7 Conv, BN, ReLU, MaxPool 224->56)\n-> Stage1(3xBasicBlock, 64ch, 56x56)\n-> Stage2(4xBasicBlock, 128ch, 28x28)\n-> Stage3(6xBasicBlock, 256ch, 14x14)\n-> Stage4(3xBasicBlock, 512ch, 7x7)\n-> AdaptiveAvgPool(1,1) -> Flatten -> Linear(512->num_classes)"
+    },
+    {
+      "id": "train_init",
+      "type": "text",
+      "x": 60,
+      "y": 560,
+      "width": 420,
+      "height": 260,
+      "text": "### train.py 初始化组件\nbuild_optimizer(model, cfg)\n-> SGD(scaled_lr, momentum=0.9, weight_decay=1e-4, nesterov=True)\n\nbuild_scheduler(optimizer, cfg)\n-> SequentialLR: LinearLR(warmup) + CosineAnnealingLR\n\nGradScaler() -> AMP FP16 梯度缩放器\nCrossEntropyLoss(label_smoothing=0.1)\nget_logger(train, logs/train.log)\n\n断点续训: load_checkpoint(resume, model, opt, sch, scaler, device)"
+    },
+    {
+      "id": "train_loop",
+      "type": "text",
+      "x": 60,
+      "y": 880,
+      "width": 480,
+      "height": 340,
+      "text": "### train.py 主训练循环\nfor epoch in range(start_epoch, total_epochs+1):\n\ntrain_one_epoch(model, train_loader, optimizer, criterion, scaler, device, epoch, logger, cfg)\n  model.train()\n  for images, labels in train_loader:\n    images/labels.to(device, non_blocking=True)\n    optimizer.zero_grad(set_to_none=True)\n    with autocast(): logits=model(images); loss=criterion(logits,labels)\n    scaler.scale(loss).backward()\n    scaler.step(optimizer); scaler.update()\n    accuracy(logits, labels, topk=(1,5)) -> acc1, acc5\n    更新 loss_meter, top1_meter, top5_meter\n\nvalidate(model, val_loader, criterion, device, epoch, logger)\n  model.eval() + @torch.no_grad()\n  for images, labels in val_loader:\n    with autocast(): logits=model(images)\n    accuracy(logits, labels, topk=(1,5))\n  返回 {loss, top1, top5}"
+    },
+    {
+      "id": "checkpoint_save",
+      "type": "text",
+      "x": 60,
+      "y": 1260,
+      "width": 420,
+      "height": 200,
+      "text": "### utils.save_checkpoint (每个 epoch 后)\nis_best = val_top1 > best_top1\nsave_checkpoint(dir, epoch, model, optimizer, scheduler, scaler, val_top1, best_top1, is_best)\n  -> 始终写 latest.pth (完整状态, 用于断点续训)\n  -> is_best=True 时写 best_model.pth (仅权重, 用于推理)\nscheduler.step() 更新学习率"
+    },
+    {
+      "id": "test_init",
+      "type": "text",
+      "x": 1120,
+      "y": 560,
+      "width": 460,
+      "height": 200,
+      "text": "### test.py 初始化\nget_logger(test, logs/test.log)\n\nload_model_weights(model, checkpoint_path, device)\n  -> torch.load(map_location=device)\n  -> 自动识别格式 (完整ckpt / 纯state_dict)\n  -> model.load_state_dict(state_dict, strict=True)\n\nCrossEntropyLoss() (无 label_smoothing)"
+    },
+    {
+      "id": "test_eval",
+      "type": "text",
+      "x": 1120,
+      "y": 820,
+      "width": 460,
+      "height": 320,
+      "text": "### test.evaluate(model, val_loader, criterion, device, topk, logger)\n@torch.no_grad() + model.eval()\n\n初始化:\n  loss_meter = AverageMeter(Loss)\n  topk_meters = {k: AverageMeter(Top-k) for k in topk}\n\nfor images, labels in val_loader:\n  images/labels.to(device, non_blocking=True)\n  with autocast():\n    logits = model(images)\n    loss = criterion(logits, labels)\n  accuracy(logits, labels, topk) -> [acc1, acc5, ...]\n  loss_meter.update(loss.item(), batch_n)\n  topk_meters[k].update(acc_val, batch_n)\n\nthroughput = total_samples / eval_elapsed\n返回 {loss, top1, topk_dict, throughput, elapsed}"
+    },
+    {
+      "id": "metrics_utils",
+      "type": "text",
+      "x": 560,
+      "y": 1260,
+      "width": 480,
+      "height": 200,
+      "text": "### utils/metrics.py (train.py 和 test.py 共用)\n\nAverageMeter: val, avg, sum, count\n  .reset() -> 清零 (每epoch开始)\n  .update(val, n) -> 加权累积, avg=sum/count\n\naccuracy(output, target, topk=(1,5)):\n  output.topk(max_k, dim=1) -> pred [N,max_k]\n  pred.t() -> [max_k, N]\n  correct = pred.eq(target.view(1,-1).expand_as(pred))\n  for k: correct[:k].any(dim=0).float().sum() / N * 100"
+    },
+    {
+      "id": "logger_utils",
+      "type": "text",
+      "x": 1100,
+      "y": 1260,
+      "width": 400,
+      "height": 160,
+      "text": "### utils/logger.py (所有模块共用)\n\nget_logger(name, log_file):\n  logging.getLogger(name) -> 单例缓存\n  StreamHandler(sys.stdout) -> 控制台\n  FileHandler(log_file, mode=a) -> 文件\n  Formatter: [时间] [name] [级别] 消息\n  propagate=False -> 不向父传播"
+    },
+    {
+      "id": "output_train",
+      "type": "text",
+      "x": 60,
+      "y": 1500,
+      "width": 320,
+      "height": 100,
+      "text": "训练输出\nlogs/train.log — 训练日志\ncheckpoints/latest.pth — 最新状态\ncheckpoints/best_model.pth — 最优权重"
+    },
+    {
+      "id": "output_test",
+      "type": "text",
+      "x": 1200,
+      "y": 1180,
+      "width": 320,
+      "height": 100,
+      "text": "评估输出\nlogs/test.log — 评估日志\n控制台: Loss, Top-1%, Top-5%\n推理吞吐量 (img/s)"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_cfg_train",
+      "fromNode": "config_yaml",
+      "fromSide": "left",
+      "toNode": "train_entry",
+      "toSide": "right",
+      "label": "--config"
+    },
+    {
+      "id": "e_cfg_test",
+      "fromNode": "config_yaml",
+      "fromSide": "right",
+      "toNode": "test_entry",
+      "toSide": "left",
+      "label": "--config"
+    },
+    {
+      "id": "e_cfg_load",
+      "fromNode": "config_yaml",
+      "fromSide": "bottom",
+      "toNode": "load_config_node",
+      "toSide": "top"
+    },
+    {
+      "id": "e_train_cfg",
+      "fromNode": "train_entry",
+      "fromSide": "right",
+      "toNode": "load_config_node",
+      "toSide": "left"
+    },
+    {
+      "id": "e_test_cfg",
+      "fromNode": "test_entry",
+      "fromSide": "left",
+      "toNode": "load_config_node",
+      "toSide": "right"
+    },
+    {
+      "id": "e_cfg_data",
+      "fromNode": "load_config_node",
+      "fromSide": "bottom",
+      "toNode": "data_pipeline",
+      "toSide": "top",
+      "label": "cfg[data]"
+    },
+    {
+      "id": "e_data_model",
+      "fromNode": "data_pipeline",
+      "fromSide": "bottom",
+      "toNode": "model_build",
+      "toSide": "top"
+    },
+    {
+      "id": "e_model_train",
+      "fromNode": "model_build",
+      "fromSide": "left",
+      "toNode": "train_init",
+      "toSide": "right",
+      "label": "model"
+    },
+    {
+      "id": "e_model_test",
+      "fromNode": "model_build",
+      "fromSide": "right",
+      "toNode": "test_init",
+      "toSide": "left",
+      "label": "model"
+    },
+    {
+      "id": "e_train_init_loop",
+      "fromNode": "train_init",
+      "fromSide": "bottom",
+      "toNode": "train_loop",
+      "toSide": "top"
+    },
+    {
+      "id": "e_train_loop_ckpt",
+      "fromNode": "train_loop",
+      "fromSide": "bottom",
+      "toNode": "checkpoint_save",
+      "toSide": "top",
+      "label": "每epoch结束"
+    },
+    {
+      "id": "e_ckpt_output",
+      "fromNode": "checkpoint_save",
+      "fromSide": "bottom",
+      "toNode": "output_train",
+      "toSide": "top"
+    },
+    {
+      "id": "e_test_init_eval",
+      "fromNode": "test_init",
+      "fromSide": "bottom",
+      "toNode": "test_eval",
+      "toSide": "top"
+    },
+    {
+      "id": "e_test_output",
+      "fromNode": "test_eval",
+      "fromSide": "bottom",
+      "toNode": "output_test",
+      "toSide": "top"
+    },
+    {
+      "id": "e_metrics_train",
+      "fromNode": "metrics_utils",
+      "fromSide": "left",
+      "toNode": "train_loop",
+      "toSide": "bottom",
+      "label": "AverageMeter, accuracy"
+    },
+    {
+      "id": "e_metrics_test",
+      "fromNode": "metrics_utils",
+      "fromSide": "right",
+      "toNode": "test_eval",
+      "toSide": "bottom",
+      "label": "AverageMeter, accuracy"
+    },
+    {
+      "id": "e_logger_train",
+      "fromNode": "logger_utils",
+      "fromSide": "left",
+      "toNode": "train_loop",
+      "toSide": "right",
+      "label": "logger"
+    },
+    {
+      "id": "e_logger_test",
+      "fromNode": "logger_utils",
+      "fromSide": "top",
+      "toNode": "test_eval",
+      "toSide": "right",
+      "label": "logger"
+    },
+    {
+      "id": "e_ckpt_resume",
+      "fromNode": "checkpoint_save",
+      "fromSide": "top",
+      "toNode": "train_init",
+      "toSide": "bottom",
+      "label": "load_checkpoint 断点续训"
+    }
+  ]
+}

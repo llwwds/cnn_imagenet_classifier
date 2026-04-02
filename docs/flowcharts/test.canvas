@@ -1,0 +1,66 @@
+{
+  "nodes": [
+    {
+      "id": "entry",
+      "type": "text",
+      "x": 420,
+      "y": 0,
+      "width": 360,
+      "height": 80,
+      "text": "## test.py\n**ResNet-34 模型评估脚本**\n入口: `python test.py --config xxx.yaml --checkpoint xxx.pth --topk 1 5`"
+    },
+    {
+      "id": "argparse",
+      "type": "text",
+      "x": 420,
+      "y": 120,
+      "width": 360,
+      "height": 120,
+      "text": "### argparse 解析命令行参数\n- `--config`     → `args.config`     (默认: configs/default.yaml)\n- `--checkpoint` → `args.checkpoint` (默认: None -> 使用 best_model.pth)\n- `--topk`       → `args.topk`       (默认: [1, 5])\n调用 `main(config_path, checkpoint_path, topk=tuple(args.topk))`"
+    },
+    {
+      "id": "main_init",
+      "type": "text",
+      "x": 380,
+      "y": 280,
+      "width": 440,
+      "height": 300,
+      "text": "### main(config_path, checkpoint_path, topk)\n**初始化阶段**\n1. `load_config(config_path)` -> `cfg`\n2. `get_logger('test', 'logs/test.log')` -> `logger`\n3. 确定 checkpoint 路径: 若未指定 -> `checkpoint_dir/best_model.pth`\n4. 设备选择: `cuda if available else cpu`\n5. `build_dataloaders(cfg)` -> `(_, val_loader)`\n6. `build_resnet34(num_classes)` -> `model`\n7. `load_model_weights(model, checkpoint_path, device)` 加载权重\n8. `model.to(device)`\n9. `CrossEntropyLoss()` -> `criterion`\n10. 确保 topk 包含 1\n11. 调用 evaluate()"
+    },
+    {
+      "id": "load_model_weights",
+      "type": "text",
+      "x": 880,
+      "y": 280,
+      "width": 380,
+      "height": 260,
+      "text": "### load_model_weights(model, weight_path, device)\n**加载模型权重**\n1. 检查文件是否存在 -> FileNotFoundError\n2. `torch.load(weight_path, map_location=device)`\n3. 自动判断格式:\n   - 若 dict 且含 `model_state_dict` key\n     -> 提取子字典 (完整 Checkpoint)\n     -> 打印 epoch 和 best_top1 信息\n   - 否则直接使用 (纯 state_dict)\n4. `model.load_state_dict(state_dict, strict=True)`\n5. 返回 model"
+    },
+    {
+      "id": "evaluate",
+      "type": "text",
+      "x": 300,
+      "y": 620,
+      "width": 500,
+      "height": 380,
+      "text": "### evaluate(model, loader, criterion, device, topk, logger)\n`@torch.no_grad()` 装饰器\n**主评估循环**\n`model.eval()` -> 评估模式\n初始化:\n- `loss_meter = AverageMeter('Loss')`\n- `topk_meters = {k: AverageMeter(f'Top-{k}') for k in topk}`\n记录 `eval_start = time.perf_counter()`\n\n`for batch_idx, (images, labels) in loader:`\n1. `images/labels.to(device, non_blocking=True)`\n2. `with autocast():` FP16 加速推理\n   `logits = model(images)` -> [N, num_classes]\n   `loss = criterion(logits, labels)`\n3. `accuracy(logits, labels, topk=topk)` -> `[acc1, acc5, ...]`\n4. `loss_meter.update(loss.item(), batch_n)`\n5. `topk_meters[k].update(acc_val, batch_n)` for k in topk\n6. 每 50 batch 打印进度\n\n计算吞吐量: `total_samples / eval_elapsed`\n返回 `{loss, top1, topk_dict, throughput, total_samples, elapsed}`"
+    },
+    {
+      "id": "print_results",
+      "type": "text",
+      "x": 380,
+      "y": 1040,
+      "width": 440,
+      "height": 200,
+      "text": "### 打印评估结果\n- 总样本数, 总耗时, 推理吞吐量 (img/s)\n- 平均 Loss\n- 遍历所有 K 值:\n  打印 Top-K 准确率 (%)\n  与 ResNet-34 参考精度比较:\n  Top-1 参考 73.3% -> 达标/未达标\n  Top-5 参考 91.4% -> 达标/未达标\n- 返回 results 字典"
+    }
+  ],
+  "edges": [
+    {"id": "e1", "fromNode": "entry", "fromSide": "bottom", "toNode": "argparse", "toSide": "top"},
+    {"id": "e2", "fromNode": "argparse", "fromSide": "bottom", "toNode": "main_init", "toSide": "top", "label": "调用 main()"},
+    {"id": "e3", "fromNode": "main_init", "fromSide": "right", "toNode": "load_model_weights", "toSide": "left", "label": "加载权重"},
+    {"id": "e4", "fromNode": "main_init", "fromSide": "bottom", "toNode": "evaluate", "toSide": "top", "label": "调用 evaluate()"},
+    {"id": "e5", "fromNode": "load_model_weights", "fromSide": "bottom", "toNode": "evaluate", "toSide": "right", "label": "model"},
+    {"id": "e6", "fromNode": "evaluate", "fromSide": "bottom", "toNode": "print_results", "toSide": "top", "label": "返回 results"}
+  ]
+}

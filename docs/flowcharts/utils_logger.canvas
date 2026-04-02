@@ -1,0 +1,55 @@
+{
+  "nodes": [
+    {
+      "id": "entry",
+      "type": "text",
+      "x": 400,
+      "y": 0,
+      "width": 300,
+      "height": 80,
+      "text": "## utils/logger.py\n**日志记录器模块**\n主接口: `get_logger(name, log_file)`"
+    },
+    {
+      "id": "get_logger",
+      "type": "text",
+      "x": 360,
+      "y": 120,
+      "width": 440,
+      "height": 380,
+      "text": "### get_logger(name, log_file=None)\n**创建/获取日志记录器**\n\n1. `logger = logging.getLogger(name)`\n   - name 相同 -> 返回缓存的同一对象 (单例)\n   - name 不同 -> 创建新 Logger\n\n2. 防重复检查: `if logger.handlers: return logger`\n   - 已有 Handler 说明已配置过,直接返回\n\n3. `logger.setLevel(logging.DEBUG)`\n   - 设置最低接受级别为 DEBUG (接受所有)\n\n4. 创建 Formatter:\n   `fmt = '[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s'`\n   `datefmt = '%Y-%m-%d %H:%M:%S'`\n\n5. 创建控制台 Handler:\n   `console_handler = StreamHandler(sys.stdout)`\n   `console_handler.setFormatter(formatter)`\n   `logger.addHandler(console_handler)`\n\n6. 若 `log_file` 不为 None:\n   `os.makedirs(log_dir, exist_ok=True)`\n   `file_handler = FileHandler(log_file, mode='a', encoding='utf-8')`\n   `file_handler.setFormatter(formatter)`\n   `logger.addHandler(file_handler)`\n\n7. `logger.propagate = False` 阻止向父传播\n8. 返回 `logger`"
+    },
+    {
+      "id": "log_levels",
+      "type": "text",
+      "x": 860,
+      "y": 120,
+      "width": 300,
+      "height": 220,
+      "text": "**日志级别 (从低到高)**\n\nDEBUG    → 调试信息\nINFO     → 普通运行信息\nWARNING  → 警告\nERROR    → 错误\nCRITAL  → 严重错误\n\n**示例输出:**\n`[2024-01-15 14:23:45] [train] [INFO] Epoch [1] Loss: 2.3456`"
+    },
+    {
+      "id": "output_targets",
+      "type": "text",
+      "x": 360,
+      "y": 540,
+      "width": 440,
+      "height": 160,
+      "text": "**双输出目标**\n\n`StreamHandler(sys.stdout)` → 控制台实时显示\n`FileHandler(log_file, mode='a')` → 磁盘文件追加写入\n\n两个 Handler 使用相同的 Formatter\n同一条日志同时出现在控制台和文件中\n断点续训时日志自动追加到已有文件"
+    },
+    {
+      "id": "usage",
+      "type": "text",
+      "x": 860,
+      "y": 380,
+      "width": 300,
+      "height": 180,
+      "text": "**调用方式**\n\ntrain.py:\n`logger = get_logger('train', 'logs/train.log')`\n`logger.info('训练开始')`\n`logger.warning('GPU 未找到')`\n\ntest.py:\n`logger = get_logger('test', 'logs/test.log')`\n`logger.info(f'Top-1: {acc:.2f}%')`"
+    }
+  ],
+  "edges": [
+    {"id": "e1", "fromNode": "entry", "fromSide": "bottom", "toNode": "get_logger", "toSide": "top"},
+    {"id": "e2", "fromNode": "get_logger", "fromSide": "right", "toNode": "log_levels", "toSide": "left", "label": "级别说明"},
+    {"id": "e3", "fromNode": "get_logger", "fromSide": "bottom", "toNode": "output_targets", "toSide": "top", "label": "输出目标"},
+    {"id": "e4", "fromNode": "log_levels", "fromSide": "bottom", "toNode": "usage", "toSide": "top", "label": "使用示例"}
+  ]
+}

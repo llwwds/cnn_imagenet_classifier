@@ -1,0 +1,170 @@
+{
+  "nodes": [
+    {
+      "id": "entry",
+      "type": "text",
+      "x": 460,
+      "y": 0,
+      "width": 280,
+      "height": 80,
+      "text": "## train.py\n**训练主脚本**\n入口: `python train.py --config configs/default.yaml`"
+    },
+    {
+      "id": "argparse",
+      "type": "text",
+      "x": 460,
+      "y": 120,
+      "width": 280,
+      "height": 80,
+      "text": "### argparse 解析\n`--config` → `args.config`\n调用 `main(config_path=args.config)`"
+    },
+    {
+      "id": "main_init",
+      "type": "text",
+      "x": 380,
+      "y": 240,
+      "width": 440,
+      "height": 380,
+      "text": "### main(config_path)\n**初始化阶段**\n\n1. `load_config(config_path)` → `cfg` 字典\n2. `get_logger('train', 'logs/train.log')` → `logger`\n3. 设备选择: `cuda if available else cpu`\n   - `torch.backends.cudnn.benchmark = True`\n4. `build_dataloaders(cfg)` → `(train_loader, val_loader)`\n5. `build_resnet34(num_classes)` → `model.to(device)`\n   - 统计参数量并打印\n6. `CrossEntropyLoss(label_smoothing=0.1)` → `criterion`\n7. `build_optimizer(model, cfg)` → `optimizer`\n8. `build_scheduler(optimizer, cfg)` → `scheduler`\n9. `GradScaler()` → `scaler`\n10. 断点续训检查:\n    若 `cfg.train.resume` 存在:\n    → `load_checkpoint(path, model, optimizer, scheduler, scaler, device)`\n    → `start_epoch, best_top1`\n    否则: `start_epoch=1, best_top1=0.0`"
+    },
+    {
+      "id": "build_optimizer",
+      "type": "text",
+      "x": 880,
+      "y": 240,
+      "width": 360,
+      "height": 200,
+      "text": "### build_optimizer(model, cfg)\n**构建 SGD 优化器**\n1. 读取: `base_lr, base_batch_size, batch_size, momentum, weight_decay`\n2. 线性缩放: `scaled_lr = base_lr × (batch_size / base_batch_size)`\n   例: 0.1 × (1024/256) = 0.4\n3. `optim.SGD(model.parameters(), lr=scaled_lr, momentum, weight_decay, nesterov=True)`\n4. 返回 `optimizer`"
+    },
+    {
+      "id": "build_scheduler",
+      "type": "text",
+      "x": 880,
+      "y": 480,
+      "width": 360,
+      "height": 220,
+      "text": "### build_scheduler(optimizer, cfg)\n**构建学习率调度器**\n1. `LinearLR(start_factor=1e-4, total_iters=warmup_epochs)`\n   Warmup: LR 从极小值线性增长到 scaled_lr\n2. `CosineAnnealingLR(T_max=epochs-warmup_epochs, eta_min=min_lr)`\n   余弦退火: LR 平滑下降到 min_lr\n3. `SequentialLR([warmup, cosine], milestones=[warmup_epochs])`\n   两阶段串联\n4. 返回 `scheduler`"
+    },
+    {
+      "id": "epoch_loop",
+      "type": "text",
+      "x": 380,
+      "y": 660,
+      "width": 440,
+      "height": 120,
+      "text": "### 主训练循环\n`for epoch in range(start_epoch, total_epochs+1):`\n\n按顺序执行:\n训练一个epoch → 验证 → 更新LR → 保存checkpoint"
+    },
+    {
+      "id": "train_one_epoch",
+      "type": "text",
+      "x": 100,
+      "y": 820,
+      "width": 420,
+      "height": 380,
+      "text": "### train_one_epoch(model, loader, optimizer, criterion, scaler, device, epoch, logger, cfg)\n**单个 epoch 训练**\n\n`model.train()` → 训练模式\n初始化: `loss_meter, top1_meter, top5_meter, batch_time`\n\n`for batch_idx, (images, labels) in loader:`\n1. `images/labels.to(device, non_blocking=True)`\n2. `optimizer.zero_grad(set_to_none=True)`\n3. `with autocast():` FP16前向\n   `logits = model(images)`\n   `loss = criterion(logits, labels)`\n4. `scaler.scale(loss).backward()` 缩放梯度反传\n5. (可选) `scaler.unscale_()` + `clip_grad_norm_()`\n6. `scaler.step(optimizer)` 参数更新\n7. `scaler.update()` 动态调整 scale factor\n8. `accuracy(logits, labels, topk=(1,5))` → acc1, acc5\n9. 更新 meters\n10. 每 log_interval 步打印日志\n\n返回 `{loss, top1, top5, throughput, time}`"
+    },
+    {
+      "id": "validate",
+      "type": "text",
+      "x": 580,
+      "y": 820,
+      "width": 380,
+      "height": 300,
+      "text": "### validate(model, loader, criterion, device, epoch, logger)\n`@torch.no_grad()` 装饰器\n**验证集评估**\n\n`model.eval()` → 评估模式\n初始化: `loss_meter, top1_meter, top5_meter`\n\n`for images, labels in loader:`\n1. `images/labels.to(device, non_blocking=True)`\n2. `with autocast():` FP16前向\n   `logits = model(images)`\n   `loss = criterion(logits, labels)`\n3. `accuracy(logits, labels, topk=(1,5))`\n4. 更新 meters\n\n打印验证汇总\n返回 `{loss, top1, top5}`"
+    },
+    {
+      "id": "post_epoch",
+      "type": "text",
+      "x": 380,
+      "y": 1160,
+      "width": 440,
+      "height": 200,
+      "text": "### epoch 结束后处理\n\n1. `scheduler.step()` 更新学习率\n2. `is_best = val_stats['top1'] > best_top1`\n3. 若 `is_best`: `best_top1 = val_stats['top1']`\n4. `save_checkpoint(checkpoint_dir, epoch, model, optimizer,`\n   `scheduler, scaler, val_top1, best_top1, is_best)`\n   - 始终保存 `latest.pth`\n   - is_best=True 时额外保存 `best_model.pth`\n\n循环结束后打印最终汇总"
+    },
+    {
+      "id": "amp_detail",
+      "type": "text",
+      "x": -100,
+      "y": 1160,
+      "width": 400,
+      "height": 200,
+      "text": "**AMP 混合精度工作流**\n\n`autocast()`:   FP32→FP16 前向传播\n`scale(loss)`:  loss × scale_factor 防梯度下溢\n`.backward()`:  缩放梯度反传\n`unscale_()`:   还原梯度 (裁剪前必须)\n`step()`:       检查inf/nan → 更新参数\n`update()`:     正常→增大scale; 异常→减半scale\n\n效果: 激活 Tensor Cores, 吞吐量 +2~3x"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "fromNode": "entry",
+      "fromSide": "bottom",
+      "toNode": "argparse",
+      "toSide": "top"
+    },
+    {
+      "id": "e2",
+      "fromNode": "argparse",
+      "fromSide": "bottom",
+      "toNode": "main_init",
+      "toSide": "top",
+      "label": "调用 main()"
+    },
+    {
+      "id": "e3",
+      "fromNode": "main_init",
+      "fromSide": "right",
+      "toNode": "build_optimizer",
+      "toSide": "left"
+    },
+    {
+      "id": "e4",
+      "fromNode": "build_optimizer",
+      "fromSide": "bottom",
+      "toNode": "build_scheduler",
+      "toSide": "top"
+    },
+    {
+      "id": "e5",
+      "fromNode": "main_init",
+      "fromSide": "bottom",
+      "toNode": "epoch_loop",
+      "toSide": "top"
+    },
+    {
+      "id": "e6",
+      "fromNode": "epoch_loop",
+      "fromSide": "bottom",
+      "toNode": "train_one_epoch",
+      "toSide": "top",
+      "label": "每个 epoch"
+    },
+    {
+      "id": "e7",
+      "fromNode": "epoch_loop",
+      "fromSide": "bottom",
+      "toNode": "validate",
+      "toSide": "top",
+      "label": "训练后验证"
+    },
+    {
+      "id": "e8",
+      "fromNode": "train_one_epoch",
+      "fromSide": "bottom",
+      "toNode": "post_epoch",
+      "toSide": "top"
+    },
+    {
+      "id": "e9",
+      "fromNode": "validate",
+      "fromSide": "bottom",
+      "toNode": "post_epoch",
+      "toSide": "top"
+    },
+    {
+      "id": "e10",
+      "fromNode": "train_one_epoch",
+      "fromSide": "left",
+      "toNode": "amp_detail",
+      "toSide": "right",
+      "label": "AMP 流程"
+    }
+  ]
+}

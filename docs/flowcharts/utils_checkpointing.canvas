@@ -1,0 +1,75 @@
+{
+  "nodes": [
+    {
+      "id": "entry",
+      "type": "text",
+      "x": 400,
+      "y": 0,
+      "width": 340,
+      "height": 80,
+      "text": "## utils/checkpointing.py\n**模型检查点保存与加载**\n提供: `save_checkpoint` + `load_checkpoint`"
+    },
+    {
+      "id": "save_checkpoint",
+      "type": "text",
+      "x": 60,
+      "y": 120,
+      "width": 400,
+      "height": 80,
+      "text": "### save_checkpoint(...)\n**保存完整训练状态到磁盘**"
+    },
+    {
+      "id": "save_detail",
+      "type": "text",
+      "x": 60,
+      "y": 240,
+      "width": 420,
+      "height": 380,
+      "text": "### save_checkpoint 详细流程\n\n参数: checkpoint_dir, epoch, model, optimizer,\n      scheduler, scaler, val_top1, best_top1, is_best\n\n1. `os.makedirs(checkpoint_dir, exist_ok=True)`\n\n2. 构建 checkpoint 字典:\n   `{'epoch': epoch,`\n   ` 'model_state_dict':     model.state_dict(),`\n   ` 'optimizer_state_dict': optimizer.state_dict(),`\n   ` 'scheduler_state_dict': scheduler.state_dict(),`\n   ` 'scaler_state_dict':    scaler.state_dict(),`\n   ` 'val_top1':  val_top1,`\n   ` 'best_top1': best_top1}`\n\n3. `latest_path = checkpoint_dir + '/latest.pth'`\n   `torch.save(checkpoint, latest_path)`\n   每个 epoch 覆盖保存 -> 用于断点续训\n\n4. `if is_best:`\n   `best_path = checkpoint_dir + '/best_model.pth'`\n   `torch.save(model.state_dict(), best_path)`\n   仅保存 state_dict -> 体积更小, 用于推理"
+    },
+    {
+      "id": "load_checkpoint",
+      "type": "text",
+      "x": 560,
+      "y": 120,
+      "width": 400,
+      "height": 80,
+      "text": "### load_checkpoint(...)\n**从磁盘恢复完整训练状态**"
+    },
+    {
+      "id": "load_detail",
+      "type": "text",
+      "x": 560,
+      "y": 240,
+      "width": 420,
+      "height": 360,
+      "text": "### load_checkpoint 详细流程\n\n参数: path, model, optimizer, scheduler, scaler, device\n\n1. `if not os.path.isfile(path): raise FileNotFoundError`\n\n2. `checkpoint = torch.load(path, map_location=device)`\n   map_location: 允许在不同设备间迁移\n   (如 GPU 保存 -> CPU 加载)\n\n3. `model.load_state_dict(checkpoint['model_state_dict'])`\n   将权重写入模型\n\n4. `optimizer.load_state_dict(checkpoint['optimizer_state_dict'])`\n   恢复 SGD 动量缓冲区\n\n5. `scheduler.load_state_dict(checkpoint['scheduler_state_dict'])`\n   恢复学习率调度进度\n\n6. `scaler.load_state_dict(checkpoint['scaler_state_dict'])`\n   恢复 FP16 缩放系数\n\n7. `start_epoch = checkpoint['epoch'] + 1`\n8. `best_top1 = checkpoint.get('best_top1', 0.0)`\n9. 返回 `(start_epoch, best_top1)`"
+    },
+    {
+      "id": "two_files",
+      "type": "text",
+      "x": 60,
+      "y": 660,
+      "width": 420,
+      "height": 160,
+      "text": "**双文件保存策略**\n\n`latest.pth` (完整 Checkpoint)\n- 包含: 权重+优化器+调度器+scaler+epoch\n- 用途: 断点续训\n- 时机: 每个 epoch 结束时覆盖\n\n`best_model.pth` (纯 state_dict)\n- 只含: 模型权重\n- 用途: 最终推理/评估\n- 时机: 仅 is_best=True 时保存"
+    },
+    {
+      "id": "why_checkpoint",
+      "type": "text",
+      "x": 560,
+      "y": 640,
+      "width": 380,
+      "height": 160,
+      "text": "**为什么需要保存优化器状态?**\n\nSGD 有动量缓冲区 (momentum buffer)\n记录了每个参数的历史梯度方向\n\n如果只保存模型权重:\n- 续训时优化器重新初始化\n- 动量信息丢失\n- 训练动态发生变化\n- 可能导致精度下降或训练不稳定"
+    }
+  ],
+  "edges": [
+    {"id": "e1", "fromNode": "entry", "fromSide": "bottom", "toNode": "save_checkpoint", "toSide": "top", "label": "保存"},
+    {"id": "e2", "fromNode": "entry", "fromSide": "bottom", "toNode": "load_checkpoint", "toSide": "top", "label": "加载"},
+    {"id": "e3", "fromNode": "save_checkpoint", "fromSide": "bottom", "toNode": "save_detail", "toSide": "top"},
+    {"id": "e4", "fromNode": "load_checkpoint", "fromSide": "bottom", "toNode": "load_detail", "toSide": "top"},
+    {"id": "e5", "fromNode": "save_detail", "fromSide": "bottom", "toNode": "two_files", "toSide": "top"},
+    {"id": "e6", "fromNode": "load_detail", "fromSide": "bottom", "toNode": "why_checkpoint", "toSide": "top"}
+  ]
+}

@@ -1,0 +1,133 @@
+{
+  "nodes": [
+    {
+      "id": "entry",
+      "type": "text",
+      "x": 400,
+      "y": 0,
+      "width": 300,
+      "height": 80,
+      "text": "## data_processing.py\n**数据预处理与加载模块**\n主入口: `build_dataloaders(cfg)`"
+    },
+    {
+      "id": "load_config",
+      "type": "text",
+      "x": 800,
+      "y": 0,
+      "width": 320,
+      "height": 120,
+      "text": "### load_config(config_path)\n**读取 YAML 配置文件**\n1. 检查文件是否存在\n2. `open(config_path, 'r')` 打开文件\n3. `yaml.safe_load(f)` 解析为 dict\n4. 返回配置字典 `cfg`"
+    },
+    {
+      "id": "build_train_transform",
+      "type": "text",
+      "x": 0,
+      "y": 160,
+      "width": 360,
+      "height": 300,
+      "text": "### build_train_transform()\n**训练集数据增强流水线**\n返回 `transforms.Compose([...])`\n\n变换顺序:\n1. `RandomResizedCrop(224, scale=(0.08,1.0), ratio=(3/4,4/3))`\n   随机裁剪+缩放 → 模型学习局部特征\n2. `RandomHorizontalFlip(p=0.5)`\n   50%概率水平翻转 → 左右不变性\n3. `ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1)`\n   随机颜色抖动 → 光照不变性\n4. `ToTensor()`\n   PIL→Tensor, [0,255]→[0.0,1.0]\n5. `Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])`\n   ImageNet 标准归一化"
+    },
+    {
+      "id": "build_val_transform",
+      "type": "text",
+      "x": 420,
+      "y": 160,
+      "width": 320,
+      "height": 240,
+      "text": "### build_val_transform()\n**验证集确定性变换流水线**\n返回 `transforms.Compose([...])`\n\n变换顺序:\n1. `Resize(256)`\n   短边缩放到256,长边等比\n2. `CenterCrop(224)`\n   从中心裁取224×224\n3. `ToTensor()`\n   PIL→Tensor\n4. `Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])`\n   与训练集相同的归一化参数"
+    },
+    {
+      "id": "build_datasets",
+      "type": "text",
+      "x": 160,
+      "y": 500,
+      "width": 380,
+      "height": 260,
+      "text": "### build_datasets(data_root)\n**从磁盘加载数据集**\n\n1. 拼接路径:\n   `train_dir = data_root + '/train'`\n   `val_dir   = data_root + '/val'`\n2. 检查目录是否存在 → FileNotFoundError\n3. `train_dataset = ImageFolder(train_dir, transform=build_train_transform())`\n   自动扫描子文件夹→类别标签映射\n4. `val_dataset   = ImageFolder(val_dir,   transform=build_val_transform())`\n5. 返回 `(train_dataset, val_dataset)`\n\n目录格式:\n```\ndata_root/train/类别A/, 类别B/, ...\ndata_root/val/类别A/, 类别B/, ...\n```"
+    },
+    {
+      "id": "build_dataloaders",
+      "type": "text",
+      "x": 160,
+      "y": 800,
+      "width": 400,
+      "height": 320,
+      "text": "### build_dataloaders(cfg)\n**构建高性能 DataLoader**\n\n1. 从 cfg 读取参数:\n   `data_root`, `batch_size`, `num_workers`, `prefetch_factor`, `val_batch_size`\n2. 调用 `build_datasets(data_root)` 获取数据集\n3. 打印数据集统计信息\n4. 构建训练 DataLoader:\n   `DataLoader(train_dataset, batch_size, shuffle=True,`\n   `num_workers, pin_memory=True,`\n   `persistent_workers, prefetch_factor, drop_last=True)`\n5. 构建验证 DataLoader:\n   `DataLoader(val_dataset, val_batch_size, shuffle=False,`\n   `num_workers, pin_memory=True,`\n   `persistent_workers, prefetch_factor, drop_last=False)`\n6. 返回 `(train_loader, val_loader)`"
+    },
+    {
+      "id": "output",
+      "type": "text",
+      "x": 220,
+      "y": 1160,
+      "width": 280,
+      "height": 80,
+      "text": "**输出: (train_loader, val_loader)**\n供 train.py 和 test.py 使用\n每次迭代返回 `(images, labels)`"
+    },
+    {
+      "id": "perf_note",
+      "type": "text",
+      "x": 620,
+      "y": 800,
+      "width": 340,
+      "height": 260,
+      "text": "**性能优化要点**\n\n`pin_memory=True`\n→ 锁页内存, DMA 直接传输, 速度+2~3x\n\n`num_workers=N`\n→ N 个子进程并行解码图片\n→ 建议设为 CPU 核心数\n\n`persistent_workers=True`\n→ epoch 结束后不销毁进程\n→ 避免每轮重新 fork 的开销\n\n`prefetch_factor=2`\n→ 每个 worker 预取 2 个 batch\n→ GPU 计算时下一 batch 已就绪\n\n`drop_last=True` (训练)\n→ 丢弃不完整 batch\n→ 保证 BN 统计稳定"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "fromNode": "entry",
+      "fromSide": "bottom",
+      "toNode": "build_dataloaders",
+      "toSide": "top",
+      "label": "主调用链"
+    },
+    {
+      "id": "e2",
+      "fromNode": "entry",
+      "fromSide": "right",
+      "toNode": "load_config",
+      "toSide": "left",
+      "label": "由调用方使用"
+    },
+    {
+      "id": "e3",
+      "fromNode": "build_dataloaders",
+      "fromSide": "top",
+      "toNode": "build_datasets",
+      "toSide": "bottom",
+      "label": "调用"
+    },
+    {
+      "id": "e4",
+      "fromNode": "build_datasets",
+      "fromSide": "top",
+      "toNode": "build_train_transform",
+      "toSide": "bottom",
+      "label": "训练集变换"
+    },
+    {
+      "id": "e5",
+      "fromNode": "build_datasets",
+      "fromSide": "top",
+      "toNode": "build_val_transform",
+      "toSide": "bottom",
+      "label": "验证集变换"
+    },
+    {
+      "id": "e6",
+      "fromNode": "build_dataloaders",
+      "fromSide": "bottom",
+      "toNode": "output",
+      "toSide": "top"
+    },
+    {
+      "id": "e7",
+      "fromNode": "build_dataloaders",
+      "fromSide": "right",
+      "toNode": "perf_note",
+      "toSide": "left",
+      "label": "性能参数"
+    }
+  ]
+}

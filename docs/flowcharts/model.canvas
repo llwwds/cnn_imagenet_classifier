@@ -1,0 +1,148 @@
+{
+  "nodes": [
+    {
+      "id": "entry",
+      "type": "text",
+      "x": 460,
+      "y": 0,
+      "width": 280,
+      "height": 80,
+      "text": "## model.py\n**ResNet-34 模型定义**\n入口: `build_resnet34(num_classes)`"
+    },
+    {
+      "id": "build_resnet34",
+      "type": "text",
+      "x": 460,
+      "y": 120,
+      "width": 320,
+      "height": 140,
+      "text": "### build_resnet34(num_classes, pretrained)\n**工厂函数**\n1. 实例化 `ResNet34(num_classes)`\n2. 如果 `pretrained=True` → 加载预训练权重\n   (当前为 NotImplementedError 占位符)\n3. 返回模型实例"
+    },
+    {
+      "id": "resnet34_init",
+      "type": "text",
+      "x": 420,
+      "y": 300,
+      "width": 400,
+      "height": 380,
+      "text": "### ResNet34.__init__(num_classes)\n**主模型初始化**\n\n**Stem 层:**\n- `self.stem_conv` = Conv2d(3→64, k=7, s=2, p=3, bias=False)\n- `self.stem_bn`   = BatchNorm2d(64)\n- `self.stem_relu` = ReLU(inplace=True)\n- `self.stem_pool` = MaxPool2d(k=3, s=2, p=1)\n\n**四个残差 Stage:**\n- `self.stage1` = _make_stage(64→64,   s=1, n=3)\n- `self.stage2` = _make_stage(64→128,  s=2, n=4)\n- `self.stage3` = _make_stage(128→256, s=2, n=6)\n- `self.stage4` = _make_stage(256→512, s=2, n=3)\n\n**分类头:**\n- `self.avg_pool` = AdaptiveAvgPool2d(1,1)\n- `self.flatten`  = Flatten(start_dim=1)\n- `self.fc_layer` = Linear(512→num_classes)\n\n调用 `_initialize_weights()`"
+    },
+    {
+      "id": "make_stage",
+      "type": "text",
+      "x": 880,
+      "y": 300,
+      "width": 360,
+      "height": 200,
+      "text": "### _make_stage(in_ch, out_ch, stride, num_blocks)\n**辅助函数: 堆叠 BasicBlock**\n1. 创建空列表 `blocks = []`\n2. 追加第一个 Block:\n   `BasicBlock(in_ch, out_ch, stride)`\n   (可能下采样 + 改变通道数)\n3. 循环追加剩余 Block:\n   `BasicBlock(out_ch, out_ch, stride=1)`\n4. 返回 `nn.Sequential(*blocks)`"
+    },
+    {
+      "id": "basicblock_init",
+      "type": "text",
+      "x": 880,
+      "y": 540,
+      "width": 380,
+      "height": 300,
+      "text": "### BasicBlock.__init__(in_ch, out_ch, stride)\n**残差块初始化**\n\n**主路径:**\n- `self.conv1` = Conv2d(in→out, k=3, s=stride, p=1, bias=False)\n- `self.bn1`   = BatchNorm2d(out)\n- `self.relu`  = ReLU(inplace=True)\n- `self.conv2` = Conv2d(out→out, k=3, s=1, p=1, bias=False)\n- `self.bn2`   = BatchNorm2d(out)\n\n**残差分支 (Shortcut):**\n- 若 `stride!=1 或 in_ch!=out_ch`:\n  → `self.shortcut` = Sequential(Conv2d(1x1, stride)+BN)\n- 否则:\n  → `self.shortcut` = Identity()"
+    },
+    {
+      "id": "basicblock_forward",
+      "type": "text",
+      "x": 880,
+      "y": 880,
+      "width": 360,
+      "height": 200,
+      "text": "### BasicBlock.forward(x)\n**残差块前向传播**\n1. `residual = self.shortcut(x)`\n   保存残差分支结果\n2. `x = conv1(x)` → 第一层卷积\n3. `x = bn1(x)` → 批归一化\n4. `x = relu(x)` → ReLU 激活\n5. `x = conv2(x)` → 第二层卷积\n6. `x = bn2(x)` → 批归一化\n7. `x = x + residual` → 残差相加\n8. `x = relu(x)` → 最终激活\n9. return x"
+    },
+    {
+      "id": "init_weights",
+      "type": "text",
+      "x": 0,
+      "y": 300,
+      "width": 360,
+      "height": 200,
+      "text": "### _initialize_weights()\n**权重初始化**\n遍历所有子模块 `self.modules()`:\n- `Conv2d`      → kaiming_normal_(fan_out, relu)\n- `BatchNorm2d` → weight=1, bias=0\n- `Linear`      → normal_(mean=0, std=0.01), bias=0\n\n良好初始化加速收敛,避免梯度爆炸/消失"
+    },
+    {
+      "id": "resnet34_forward",
+      "type": "text",
+      "x": 420,
+      "y": 720,
+      "width": 400,
+      "height": 340,
+      "text": "### ResNet34.forward(images)\n**主模型前向传播**\n输入: `[N, 3, 224, 224]`\n\n1. `images = images.half()` → FP32→FP16\n2. `x = stem_conv(images)` → [N,64,112,112]\n3. `x = stem_bn(x)` → BN\n4. `x = stem_relu(x)` → ReLU\n5. `x = stem_pool(x)` → [N,64,56,56]\n6. `x = stage1(x)` → [N,64,56,56]\n7. `x = stage2(x)` → [N,128,28,28]\n8. `x = stage3(x)` → [N,256,14,14]\n9. `x = stage4(x)` → [N,512,7,7]\n10. `x = avg_pool(x)` → [N,512,1,1]\n11. `x = flatten(x)` → [N,512]\n12. `logits = fc_layer(x)` → [N,num_classes]\n13. return logits"
+    },
+    {
+      "id": "output",
+      "type": "text",
+      "x": 460,
+      "y": 1100,
+      "width": 280,
+      "height": 60,
+      "text": "**输出: logits [N, num_classes]**\nFP16 Tensor, 未经 Softmax"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "fromNode": "entry",
+      "fromSide": "bottom",
+      "toNode": "build_resnet34",
+      "toSide": "top"
+    },
+    {
+      "id": "e2",
+      "fromNode": "build_resnet34",
+      "fromSide": "bottom",
+      "toNode": "resnet34_init",
+      "toSide": "top",
+      "label": "实例化 ResNet34"
+    },
+    {
+      "id": "e3",
+      "fromNode": "resnet34_init",
+      "fromSide": "right",
+      "toNode": "make_stage",
+      "toSide": "left",
+      "label": "_make_stage × 4"
+    },
+    {
+      "id": "e4",
+      "fromNode": "make_stage",
+      "fromSide": "bottom",
+      "toNode": "basicblock_init",
+      "toSide": "top",
+      "label": "创建 BasicBlock"
+    },
+    {
+      "id": "e5",
+      "fromNode": "basicblock_init",
+      "fromSide": "bottom",
+      "toNode": "basicblock_forward",
+      "toSide": "top"
+    },
+    {
+      "id": "e6",
+      "fromNode": "resnet34_init",
+      "fromSide": "left",
+      "toNode": "init_weights",
+      "toSide": "right",
+      "label": "_initialize_weights()"
+    },
+    {
+      "id": "e7",
+      "fromNode": "resnet34_init",
+      "fromSide": "bottom",
+      "toNode": "resnet34_forward",
+      "toSide": "top",
+      "label": "推理时调用"
+    },
+    {
+      "id": "e8",
+      "fromNode": "resnet34_forward",
+      "fromSide": "bottom",
+      "toNode": "output",
+      "toSide": "top"
+    }
+  ]
+}

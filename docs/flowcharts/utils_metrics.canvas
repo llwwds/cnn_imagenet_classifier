@@ -1,0 +1,85 @@
+{
+  "nodes": [
+    {
+      "id": "entry",
+      "type": "text",
+      "x": 400,
+      "y": 0,
+      "width": 300,
+      "height": 80,
+      "text": "## utils/metrics.py\n**训练指标工具模块**\n提供: `AverageMeter` 类 + `accuracy` 函数"
+    },
+    {
+      "id": "average_meter_class",
+      "type": "text",
+      "x": 80,
+      "y": 120,
+      "width": 380,
+      "height": 80,
+      "text": "### class AverageMeter\n**滑动均值计数器**\n跨 batch 累积计算加权均值"
+    },
+    {
+      "id": "am_init",
+      "type": "text",
+      "x": 80,
+      "y": 240,
+      "width": 360,
+      "height": 140,
+      "text": "### __init__(name)\n1. `self.name = name` 指标名称\n2. `self.reset()` 初始化所有状态变量\n   - `self.val = 0.0`   最近一次值\n   - `self.avg = 0.0`   加权均值\n   - `self.sum = 0.0`   加权累积和\n   - `self.count = 0`   总样本数"
+    },
+    {
+      "id": "am_reset",
+      "type": "text",
+      "x": 80,
+      "y": 420,
+      "width": 360,
+      "height": 120,
+      "text": "### reset()\n将所有状态变量清零\n- `val, avg, sum = 0.0`\n- `count = 0`\n通常在每个 epoch 开始时调用"
+    },
+    {
+      "id": "am_update",
+      "type": "text",
+      "x": 80,
+      "y": 580,
+      "width": 360,
+      "height": 180,
+      "text": "### update(val, n=1)\n用新观测值更新统计量\n\n参数:\n- `val`: 当前 batch 指标值 (如 loss.item())\n- `n`:   当前 batch 样本数 (images.size(0))\n\n操作:\n1. `self.val = val`\n2. `self.sum += val * n`  加权累加\n3. `self.count += n`\n4. `self.avg = self.sum / self.count`"
+    },
+    {
+      "id": "accuracy_func",
+      "type": "text",
+      "x": 520,
+      "y": 120,
+      "width": 380,
+      "height": 80,
+      "text": "### accuracy(output, target, topk=(1,))\n**Top-K 准确率计算函数**"
+    },
+    {
+      "id": "accuracy_detail",
+      "type": "text",
+      "x": 520,
+      "y": 240,
+      "width": 440,
+      "height": 360,
+      "text": "### accuracy 详细流程\n\n输入:\n- `output`: logits [N, C] (N=batch, C=类别数)\n- `target`: 真实标签 [N]\n- `topk`:   如 (1, 5)\n\n1. `max_k = max(topk)`\n2. `batch_size = output.size(0)`\n3. `_, pred = output.topk(max_k, dim=1, largest=True, sorted=True)`\n   -> pred: [N, max_k] 前max_k名预测类别索引\n4. `pred = pred.t()` -> [max_k, N] 转置\n5. `correct = pred.eq(target.view(1,-1).expand_as(pred))`\n   -> [max_k, N] 布尔矩阵\n   correct[k,i]=True 表示样本i第k名预测正确\n6. `for k in topk:`\n   `correct_k = correct[:k].any(dim=0).float().sum().item()`\n   `acc = correct_k / batch_size * 100.0`\n   `results.append(acc)`\n7. 返回 `results` (百分比列表)"
+    },
+    {
+      "id": "topk_explain",
+      "type": "text",
+      "x": 520,
+      "y": 640,
+      "width": 380,
+      "height": 160,
+      "text": "**Top-K 含义**\n\nTop-1: 第1名预测 == 真实标签\n   (通常意义的\"正确率\")\n\nTop-5: 前5名预测中包含真实标签\n   (ImageNet 官方评估指标之一)\n   适用于类别间视觉相似的场景\n   (如200+种狗的品种)"
+    }
+  ],
+  "edges": [
+    {"id": "e1", "fromNode": "entry", "fromSide": "bottom", "toNode": "average_meter_class", "toSide": "top", "label": "AverageMeter"},
+    {"id": "e2", "fromNode": "entry", "fromSide": "bottom", "toNode": "accuracy_func", "toSide": "top", "label": "accuracy"},
+    {"id": "e3", "fromNode": "average_meter_class", "fromSide": "bottom", "toNode": "am_init", "toSide": "top"},
+    {"id": "e4", "fromNode": "am_init", "fromSide": "bottom", "toNode": "am_reset", "toSide": "top"},
+    {"id": "e5", "fromNode": "am_reset", "fromSide": "bottom", "toNode": "am_update", "toSide": "top"},
+    {"id": "e6", "fromNode": "accuracy_func", "fromSide": "bottom", "toNode": "accuracy_detail", "toSide": "top"},
+    {"id": "e7", "fromNode": "accuracy_detail", "fromSide": "bottom", "toNode": "topk_explain", "toSide": "top"}
+  ]
+}
